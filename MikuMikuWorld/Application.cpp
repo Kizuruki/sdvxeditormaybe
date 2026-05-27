@@ -5,6 +5,8 @@
 #include "Localization.h"
 #include "ResourceManager.h"
 #include "Utilities.h"
+#include "SdvxEditor/ChartManager.h"
+#include "SdvxEditor/SDVXTrackRenderer.h"
 #include <filesystem>
 #include <json.hpp>
 #include <stdexcept>
@@ -301,6 +303,37 @@ namespace MikuMikuWorld
 				windowState.resetting = false;
 			}
 		}
+
+		// --- SDVX prototype window (track + notes) ---
+		// This is intentionally self-contained so we can iterate quickly without touching ScoreEditor.
+		static SdvxEditor::ChartManager sdvxChart{};
+		static SdvxEditor::SDVXTrackRenderer trackRenderer{};
+
+		ImGui::Begin("SDVX Track");
+		{
+			ImGui::TextUnformatted("Mouse wheel: scroll pulses");
+			ImGui::Separator();
+
+			// Simple scroll control (like the snippet you pasted)
+			if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+			{
+				const float wheel = ImGui::GetIO().MouseWheel;
+				if (wheel != 0.0f)
+				{
+					// 120 pulses is a nice-feeling step with our default pixelsPerPulse.
+					const kson::Pulse delta = static_cast<kson::Pulse>(wheel * 120.0f);
+					sdvxChart.setCurrentPulse(sdvxChart.currentPulse() - delta);
+				}
+			}
+
+			// Reserve a fixed area for the highway so it stays usable.
+			const float highwayHeight = std::max(200.0f, ImGui::GetContentRegionAvail().y);
+			ImGui::BeginChild("##sdvx_highway", ImVec2(0, highwayHeight), true,
+			                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+			trackRenderer.render(sdvxChart);
+			ImGui::EndChild();
+		}
+		ImGui::End();
 
 		editor->update();
 

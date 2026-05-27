@@ -1,3 +1,6 @@
 [submodule "Depends/cpp-httplib"]
 	path = Depends/cpp-httplib
 	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "external/libkson"]
+	path = external/libkson
+	url = https://github.com/kshootmania/libkson.git
