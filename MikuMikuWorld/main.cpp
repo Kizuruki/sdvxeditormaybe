@@ -1,7 +1,22 @@
-#include "Application.h"
-#include "IO.h"
+// 1. CRITICAL: C++ Standard Library headers MUST come first
+#include <memory>
+#include <string>
+#include <vector>
+#include <algorithm>
 #include <iostream>
 
+// 2. CRITICAL: GLAD must come before Windows headers
+#include <glad/glad.h> 
+
+// Add these two lines for the missing Drag-and-Drop / Command Line functions!
+#include <Windows.h>
+#include <shellapi.h>
+
+// 3. Project headers
+#include "Application.h"
+#include "IO.h"
+
+// 4. Everything else...
 namespace mmw = MikuMikuWorld;
 mmw::Application app;
 

@@ -1,4 +1,6 @@
-﻿#include "Application.h"
+﻿#include <Windows.h>
+#include <shellapi.h>
+#include "Application.h"
 #include "ApplicationConfiguration.h"
 #include "Colors.h"
 #include "IO.h"
@@ -8,7 +10,7 @@
 #include "SdvxEditor/ChartManager.h"
 #include "SdvxEditor/SDVXTrackRenderer.h"
 #include <filesystem>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <thread>
 

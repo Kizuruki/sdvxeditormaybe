@@ -1,7 +1,10 @@
 // Put httplib first otherwise the compiler will throw an error
+#include <iostream>
+#include <windows.h>
+#include <shellapi.h>
 #include <corecrt_math.h>
 #define CPPHTTPLIB_OPENSSL_SUPPORT 1
-#include <cpp-httplib/httplib.h>
+// #include <cpp-httplib/httplib.h>
 
 #include "Application.h"
 #include "ApplicationConfiguration.h"
@@ -91,31 +94,6 @@ namespace MikuMikuWorld
 				std::cout << "Loading cached latest version" << std::endl;
 				shouldFetchUpdate = false;
 			}
-		}
-		if (shouldFetchUpdate)
-		{
-
-			httplib::Client client("https://api.github.com");
-
-			std::cout << "Fetching new update" << std::endl;
-			auto res = client.Get("/repos/sevenc-nanashi/MikuMikuWorld4cc/releases/latest");
-			if (!res)
-			{
-				std::cout << "Failed to fetch latest update: client.Get failed" << std::endl;
-				return;
-			}
-			std::cout << "Status: " << res->status << std::endl;
-			if (res->status == 200)
-			{
-				auto parsed = nlohmann::json::parse(res->body);
-				std::string tagName = parsed["tag_name"];
-				latestVersionString = tagName.substr(1);
-			}
-
-			auto file = IO::File(updateFlagPath, L"w");
-			file.write(latestVersionString);
-			file.flush();
-			file.close();
 		}
 
 		auto currentVersion = Utilities::splitString(Application::getAppVersion(), '.');
@@ -786,8 +764,10 @@ namespace MikuMikuWorld
 					deleteOldAutoSave(config.autoSaveMaxCount);
 
 				bool audioRunning = context.audio.isEngineStarted();
-				if (ImGui::MenuItem(audioRunning ? "Stop Audio" : "Start Audio",
-				                    audioRunning ? ICON_FA_VOLUME_UP : ICON_FA_VOLUME_MUTE))
+				if (ImGui::MenuItem(
+					audioRunning ? "Stop Audio" : "Start Audio",
+					reinterpret_cast<const char*>(
+						audioRunning ? ICON_FA_VOLUME_UP : ICON_FA_VOLUME_MUTE)))
 				{
 					if (audioRunning)
 						context.audio.stopEngine();
@@ -852,54 +832,54 @@ namespace MikuMikuWorld
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 		ImGui::Begin("##app_toolbar", NULL, ImGuiWindowFlags_Toolbar);
 
-		if (UI::toolbarButton(ICON_FA_FILE, getString("new"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_FILE), getString("new"),
 		                      ToShortcutString(config.input.create)))
 		{
 			Application::windowState.resetting = true;
 		}
 
-		if (UI::toolbarButton(ICON_FA_FOLDER_OPEN, getString("open"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_FOLDER_OPEN), getString("open"),
 		                      ToShortcutString(config.input.open)))
 		{
 			Application::windowState.resetting = true;
 			Application::windowState.shouldPickScore = true;
 		}
 
-		if (UI::toolbarButton(ICON_FA_SAVE, getString("save"), ToShortcutString(config.input.save)))
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_SAVE), getString("save"), ToShortcutString(config.input.save)))
 			trySave(context.workingData.filename);
 
-		if (UI::toolbarButton(ICON_FA_FILE_EXPORT, getString("export_usc"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_FILE_EXPORT), getString("export_usc"),
 		                      ToShortcutString(config.input.exportUsc)))
 			exportUsc();
 
 		UI::toolbarSeparator();
 
-		if (UI::toolbarButton(ICON_FA_CUT, getString("cut"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_CUT), getString("cut"),
 		                      ToShortcutString(config.input.cutSelection),
 		                      context.selectedNotes.size() > 0))
 			context.cutSelection();
 
-		if (UI::toolbarButton(ICON_FA_COPY, getString("copy"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_COPY), getString("copy"),
 		                      ToShortcutString(config.input.copySelection),
 		                      context.selectedNotes.size() > 0))
 			context.copySelection();
 
-		if (UI::toolbarButton(ICON_FA_PASTE, getString("paste"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_PASTE), getString("paste"),
 		                      ToShortcutString(config.input.paste)))
 			context.paste(false);
 
-		if (UI::toolbarButton(ICON_FA_CLONE, getString("duplicate"),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_CLONE), getString("duplicate"),
 		                      ToShortcutString(config.input.duplicate),
 		                      context.selectedNotes.size() > 0))
 			context.duplicateSelection(false);
 
 		UI::toolbarSeparator();
 
-		if (UI::toolbarButton(ICON_FA_UNDO, getString("undo"), ToShortcutString(config.input.undo),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_UNDO), getString("undo"), ToShortcutString(config.input.undo),
 		                      context.history.hasUndo()))
 			context.undo();
 
-		if (UI::toolbarButton(ICON_FA_REDO, getString("redo"), ToShortcutString(config.input.redo),
+		if (UI::toolbarButton(reinterpret_cast<const char*>(ICON_FA_REDO), getString("redo"), ToShortcutString(config.input.redo),
 		                      context.history.hasRedo()))
 			context.redo();
 

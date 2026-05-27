@@ -4,7 +4,7 @@
 */
 
 #pragma once
-#include "../Math.h"
+#include "../MMWMath.h"
 #include "AudioManager.h"
 #include <stdint.h>
 #include <vector>

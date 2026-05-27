@@ -1,6 +1,6 @@
 #pragma once
 #include "Quad.h"
-#include "../Math.h"
+#include "../MMWMath.h"
 #include "Texture.h"
 #include "AnchorType.h"
 #include "VertexBuffer.h"

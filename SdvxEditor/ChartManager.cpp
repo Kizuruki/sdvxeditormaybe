@@ -1,7 +1,21 @@
-#include "ChartManager.h"
+// 1. C++ Standard Library First
+#include <memory>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <iostream>
 
+// 2. GLAD (Must be before Windows.h)
+#include <glad/glad.h> 
+
+// 3. External Library Headers (libkson)
 #include <kson/IO/KsonIO.hpp>
 #include <kson/Util/TimingUtils.hpp>
+
+// 4. Project Headers
+#include "Application.h"
+#include "IO.h"
+#include "ChartManager.h"
 
 namespace SdvxEditor
 {

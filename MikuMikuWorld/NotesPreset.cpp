@@ -153,7 +153,7 @@ namespace MikuMikuWorld
 				              // we will add the extension later after determining what the final
 				              // filename should be
 				              std::string filename =
-				                  (libPath / fixFilename(preset.getName())).u8string();
+				                  (libPath / fixFilename(preset.getName())).string();
 				              preset.write(filename, false);
 			              }
 		              });

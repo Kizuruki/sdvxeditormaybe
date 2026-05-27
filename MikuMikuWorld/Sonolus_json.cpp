@@ -1,13 +1,13 @@
 #include "Sonolus_json.h"
 
 #include "IO.h"
-#include "Math.h"
+#include "MMWMath.h"
 #include "Constants.h"
 
 #include <iostream>
 #include <cmath>
 #include <cstdio>
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 #include <unordered_map>
 #include <stdexcept>
 #include <optional>

@@ -1,6 +1,6 @@
 #include "../IO.h"
 #include "../File.h"
-#include "../Math.h"
+#include "../MMWMath.h"
 #include "../Stopwatch.h"
 
 #define MINIAUDIO_IMPLEMENTATION

@@ -1,7 +1,7 @@
 #pragma once
 #include "UI.h"
-#include "json.hpp"
-#include "Math.h"
+#include <nlohmann/json.hpp>
+#include "MMWMath.h"
 #include "InputBinding.h"
 
 namespace MikuMikuWorld

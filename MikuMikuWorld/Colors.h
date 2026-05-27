@@ -1,5 +1,5 @@
 #pragma once
-#include "Math.h"
+#include "MMWMath.h"
 
 namespace MikuMikuWorld
 {

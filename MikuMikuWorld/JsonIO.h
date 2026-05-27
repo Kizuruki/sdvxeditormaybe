@@ -1,7 +1,7 @@
 #pragma once
-#include "Math.h"
+#include "MMWMath.h"
 #include "Score.h"
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <unordered_set>
 
 namespace mmw = MikuMikuWorld;
