@@ -2,6 +2,7 @@
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
