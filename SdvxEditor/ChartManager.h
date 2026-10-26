@@ -20,7 +20,9 @@ public:
 
     // Current playhead position in kson::Pulse units (used by renderers).
     [[nodiscard]] kson::Pulse currentPulse() const noexcept { return currentPulse_; }
-    void setCurrentPulse(kson::Pulse pulse) noexcept { currentPulse_ = pulse; }
+    void setCurrentPulse(kson::Pulse pulse) noexcept {
+        currentPulse_ = std::max<kson::Pulse>(0, pulse);
+    }
 
     // --- Note views (read-mostly helpers) ---
     [[nodiscard]] const kson::BTLane<kson::Interval>& btLanes() const { return chart_.note.bt; }

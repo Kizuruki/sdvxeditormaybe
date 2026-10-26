@@ -30,14 +30,14 @@ namespace SdvxEditor
 			float fxOverlayAlpha = 0.12f;
 
 			// Background color under the lanes.
-			ImU32 highwayBg = ImGui::ColorConvertFloat4ToU32(ImVec4(0.10f, 0.10f, 0.10f, 1.00f));
+			ImU32 highwayBg = IM_COL32(26, 26, 26, 255);  // same 0.10,0.10,0.10,1.0
 		};
 
 		explicit SDVXTrackRenderer(Style style = {});
 
 		// Draw a vertical 4 BT + 2 FX highway using the current ImGui window's content region.
 		// The vertical scroll is centered around ChartManager::currentPulse().
-		void render(const ChartManager& chartManager);
+		void render(ChartManager& chartManager);
 
 		void setStyle(const Style& style) { style_ = style; }
 		[[nodiscard]] const Style& getStyle() const noexcept { return style_; }

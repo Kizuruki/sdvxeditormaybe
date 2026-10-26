@@ -35,7 +35,7 @@ namespace SdvxEditor
 		drawList->AddLine(p1, p2, col, mainThickness);
 	}
 
-	void SDVXTrackRenderer::render(const ChartManager& chartManager)
+	void SDVXTrackRenderer::render(ChartManager& chartManager)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		if (!drawList)
@@ -143,17 +143,18 @@ namespace SdvxEditor
 		const float cursorY = pulseToScreenY(centerPulse);
 		const int triPtOffset = 6;
 		const float triX = min.x - (triPtOffset * 2.0f);
-
-		drawList->AddTriangleFilled(ImVec2(triX, cursorY - triPtOffset),
-		                            ImVec2(triX, cursorY + triPtOffset),
-		                            ImVec2(triX + (triPtOffset * 2.0f), cursorY),
-		                            MikuMikuWorld::cursorColor);
+		drawList->AddTriangleFilled(
+			ImVec2(triX, cursorY - triPtOffset),
+			ImVec2(triX, cursorY + triPtOffset),
+			ImVec2(triX + (triPtOffset * 2.0f), cursorY),
+			MikuMikuWorld::cursorColor);
 		drawList->AddLine(ImVec2(min.x, cursorY), ImVec2(max.x, cursorY),
-		                  MikuMikuWorld::cursorColor, 2.0f);
-
-		drawList->PopClipRect();
-
-		// Consume the space so later widgets appear below the highway.
+						  MikuMikuWorld::cursorColor, 2.0f);
+	
+		drawList->PopClipRect();  // ONE call only
+	
+		// Consume layout space — Dummy, NOT InvisibleButton
+		// Input is handled in Application.cpp, not here
 		ImGui::Dummy(size);
 	}
 
@@ -270,6 +271,54 @@ namespace SdvxEditor
 				{
 					const float y2 = pulseToScreenY(p + len);
 					drawLong(fxMinX, fxMaxX, y, y2, fxCol);
+				}
+			}
+		}
+		// ---- Laser lanes (0 = left/blue, 1 = right/pink) ----
+		const ImU32 laserCols[2] = {
+			ImGui::GetColorU32(ImVec4(0.10f, 0.60f, 1.00f, 1.0f)),   // L: blue
+			ImGui::GetColorU32(ImVec4(1.00f, 0.20f, 0.70f, 1.0f)),   // R: pink
+		};
+
+		for (int laserLane = 0; laserLane < 2; ++laserLane)
+		{
+			const ImU32 col = laserCols[laserLane];
+			const float laserW = laneUnitWidth * 0.35f;  // narrower than BT
+
+			for (auto it = chartManager.laserLanes()[laserLane].lower_bound(startPulse);
+				it != chartManager.laserLanes()[laserLane].end() && it->first <= endPulse; ++it)
+			{
+				const kson::Pulse sectionStart = it->first;
+				const kson::LaserSection& section = it->second;
+
+				if (section.v.empty()) continue;
+
+				// Walk the graph points and draw line segments between them
+				const kson::GraphValue* prevGv = nullptr;
+				kson::Pulse prevPulse = 0;
+
+				for (auto& [relPulse, gp] : section.v)   // gp is GraphPoint, not GraphValue
+				{
+					const kson::Pulse absPulse = sectionStart + relPulse;
+					const float x = min.x + static_cast<float>(gp.v.vf) * (max.x - min.x); // gp.v.vf
+					const float y = pulseToScreenY(absPulse);
+				
+					if (prevGv != nullptr)
+					{
+						const float prevX = min.x + static_cast<float>(prevGv->vf) * (max.x - min.x);
+						const float prevY = pulseToScreenY(sectionStart + prevPulse);
+						drawList->AddLine(ImVec2(prevX, prevY), ImVec2(x, y), withAlpha(col, 0.85f), laserW);
+						drawList->AddLine(ImVec2(prevX, prevY), ImVec2(x, y), withAlpha(col, 0.25f), laserW * 2.5f);
+					}
+				
+					const float d = 5.0f;
+					drawList->AddQuadFilled(
+						ImVec2(x, y - d), ImVec2(x + d, y),
+						ImVec2(x, y + d), ImVec2(x - d, y),
+						withAlpha(col, 1.0f));
+				
+					prevGv    = &gp.v;    // store GraphValue pointer
+					prevPulse = relPulse;
 				}
 			}
 		}

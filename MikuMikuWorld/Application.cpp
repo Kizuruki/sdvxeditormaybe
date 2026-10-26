@@ -1,18 +1,22 @@
 ﻿#include <Windows.h>
+#include <commdlg.h>
 #include <shellapi.h>
 #include "Application.h"
 #include "ApplicationConfiguration.h"
 #include "Colors.h"
+#include "SdvxEditor/EditHistory.h"
 #include "IO.h"
 #include "Localization.h"
 #include "ResourceManager.h"
 #include "Utilities.h"
+#include "SdvxEditor/KshExport.h" 
 #include "SdvxEditor/ChartManager.h"
-#include "SdvxEditor/SDVXTrackRenderer.h"
+#include "SdvxEditor/SDVXTrackRenderer.h"	
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <thread>
+#include "SdvxEditor/SdvxMetaPanel.h"
 
 namespace MikuMikuWorld
 {
@@ -306,34 +310,302 @@ namespace MikuMikuWorld
 			}
 		}
 
-		// --- SDVX prototype window (track + notes) ---
-		// This is intentionally self-contained so we can iterate quickly without touching ScoreEditor.
+		// --- SDVX Editor ---
+		enum class SdvxTool { Select, BT, FX, LaserL, LaserR };
 		static SdvxEditor::ChartManager sdvxChart{};
+		static SdvxEditor::EditHistory sdvxHistory{};
 		static SdvxEditor::SDVXTrackRenderer trackRenderer{};
+		static SdvxTool sdvxTool = SdvxTool::BT;
+		static bool sdvxDragging = false;
+		static kson::Pulse sdvxDragStartPulse = 0;
+		static int sdvxDragLane = 0;
 
-		ImGui::Begin("SDVX Track");
+		ImGui::Begin("SDVX Track", nullptr, ImGuiWindowFlags_MenuBar);
 		{
-			ImGui::TextUnformatted("Mouse wheel: scroll pulses");
+			// ---- Menu bar ----
+			if (ImGui::BeginMenuBar())
+			{
+				if (ImGui::BeginMenu("File"))
+				{
+					if (ImGui::MenuItem("New"))
+						sdvxChart = SdvxEditor::ChartManager{};
+
+					if (ImGui::MenuItem("Open .kson..."))
+					{
+						char buf[MAX_PATH] = {};
+						OPENFILENAMEA ofn{};
+						ofn.lStructSize = sizeof(ofn);
+						ofn.hwndOwner   = glfwGetWin32Window(window);
+						ofn.lpstrFilter = "KSON Files\0*.kson\0All Files\0*.*\0";
+						ofn.lpstrFile   = buf;
+						ofn.nMaxFile    = MAX_PATH;
+						ofn.Flags       = OFN_FILEMUSTEXIST;
+						if (GetOpenFileNameA(&ofn))
+							sdvxChart.loadKson(buf);
+					}
+					if (ImGui::MenuItem("Save .kson..."))
+					{
+						char buf[MAX_PATH] = {};
+						OPENFILENAMEA ofn{};
+						ofn.lStructSize = sizeof(ofn);
+						ofn.hwndOwner   = glfwGetWin32Window(window);
+						ofn.lpstrFilter = "KSON Files\0*.kson\0All Files\0*.*\0";
+						ofn.lpstrFile   = buf;
+						ofn.nMaxFile    = MAX_PATH;
+						ofn.lpstrDefExt = "kson";
+						ofn.Flags       = OFN_OVERWRITEPROMPT;
+						if (GetSaveFileNameA(&ofn))
+							sdvxChart.saveKson(buf);
+					}
+					if (ImGui::MenuItem("Export .ksh..."))
+					{
+						char buf[MAX_PATH] = {};
+						OPENFILENAMEA ofn{};
+						ofn.lStructSize = sizeof(ofn);
+						ofn.hwndOwner   = glfwGetWin32Window(window);
+						ofn.lpstrFilter = "KSH Files\0*.ksh\0All Files\0*.*\0";
+						ofn.lpstrFile   = buf;
+						ofn.nMaxFile    = MAX_PATH;
+						ofn.lpstrDefExt = "ksh";
+						ofn.Flags       = OFN_OVERWRITEPROMPT;
+						if (GetSaveFileNameA(&ofn))
+							SdvxEditor::exportKsh(sdvxChart, buf);
+					}
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenuBar();
+			}
+
+			// ---- Toolbar ----
+			auto toolBtn = [&](const char* label, SdvxTool t) {
+				bool active = (sdvxTool == t);
+				if (active) ImGui::PushStyleColor(ImGuiCol_Button,
+								ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+				if (ImGui::Button(label)) sdvxTool = t;
+				if (active) ImGui::PopStyleColor();
+				ImGui::SameLine();
+			};
+
+			toolBtn("Select",  SdvxTool::Select);
+			toolBtn("BT",      SdvxTool::BT);
+			toolBtn("FX",      SdvxTool::FX);
+			toolBtn("Laser L", SdvxTool::LaserL);
+			toolBtn("Laser R", SdvxTool::LaserR);
+
+			ImGui::NewLine();
+
+			// Tool hint
+			switch (sdvxTool)
+			{
+			case SdvxTool::BT:
+				ImGui::TextUnformatted("LMB: place/drag BT  |  RMB: delete  |  Wheel: scroll");
+				break;
+			case SdvxTool::FX:
+				ImGui::TextUnformatted("LMB: place/drag FX (left or right half)  |  RMB: delete");
+				break;
+			case SdvxTool::LaserL:
+				ImGui::TextUnformatted("LMB: add laser L point  |  RMB: delete");
+				break;
+			case SdvxTool::LaserR:
+				ImGui::TextUnformatted("LMB: add laser R point  |  RMB: delete");
+				break;
+			default:
+				ImGui::TextUnformatted("Wheel: scroll");
+				break;
+			}
 			ImGui::Separator();
 
-			// Simple scroll control (like the snippet you pasted)
-			if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+			// ---- Scroll (outer window hover covers child too) ----
+			if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows))
 			{
 				const float wheel = ImGui::GetIO().MouseWheel;
 				if (wheel != 0.0f)
 				{
-					// 120 pulses is a nice-feeling step with our default pixelsPerPulse.
-					const kson::Pulse delta = static_cast<kson::Pulse>(wheel * 120.0f);
+					kson::Pulse delta = static_cast<kson::Pulse>(wheel * 120.0f);
 					sdvxChart.setCurrentPulse(sdvxChart.currentPulse() - delta);
+					// setCurrentPulse already clamps to 0
+				}
+			}
+			// Undo/redo
+			const bool ctrl = ImGui::GetIO().KeyCtrl;
+			if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z)) sdvxHistory.undo(sdvxChart);
+			if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y)) sdvxHistory.redo(sdvxChart);
+			// ---- Highway child window ----
+			const float highwayHeight = std::max(200.0f, ImGui::GetContentRegionAvail().y);
+			ImGui::BeginChild("##sdvx_highway", ImVec2(0.0f, highwayHeight), true,
+							ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+			// Capture layout BEFORE render() calls Dummy and moves cursor
+			const ImVec2 hwPos  = ImGui::GetCursorScreenPos();
+			const ImVec2 hwSize = ImGui::GetContentRegionAvail();
+
+			trackRenderer.render(sdvxChart);   // only draws, no input
+
+			// ---- Input (inside child, after render) ----
+			if (ImGui::IsWindowHovered() && hwSize.x > 0 && hwSize.y > 0)
+			{
+				const auto& style  = trackRenderer.getStyle();
+				const ImVec2 mouse = ImGui::GetMousePos();
+				const float relX   = mouse.x - hwPos.x;
+				const float relY   = mouse.y - hwPos.y;
+
+				// Only act if mouse is inside the highway rect
+				if (relX >= 0 && relX < hwSize.x && relY >= 0 && relY < hwSize.y)
+				{
+					// Convert Y → snapped pulse
+					const float cursorScreenY = hwPos.y + style.cursorYNormalized * hwSize.y;
+					const float pixelDelta    = cursorScreenY - mouse.y;
+					const kson::Pulse rawPulse = sdvxChart.currentPulse()
+						+ static_cast<kson::Pulse>(pixelDelta / style.pixelsPerPulse);
+
+					const kson::Pulse snap = std::max<kson::Pulse>(1, style.gridStepMinor);
+					const kson::Pulse snapped = ((rawPulse + snap / 2) / snap) * snap;
+					const kson::Pulse placePulse = std::max<kson::Pulse>(0, snapped);
+
+					// Convert X → BT column (0-3) and FX side (0=left, 1=right)
+					const float unitW  = hwSize.x / 4.0f;
+					const int btCol    = std::clamp(static_cast<int>(relX / unitW), 0, 3);
+					const int fxSide   = (relX < hwSize.x * 0.5f) ? 0 : 1; // 0=FX-L, 1=FX-R
+
+					// ---- Place / start drag ----
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					{
+						sdvxDragging       = true;
+						sdvxDragStartPulse = placePulse;
+						sdvxDragLane       = (sdvxTool == SdvxTool::FX) ? fxSide : btCol;
+
+						if (sdvxTool == SdvxTool::BT)
+						{
+							// Place chip immediately on click; drag will extend to hold below
+							auto& lane = sdvxChart.chart().note.bt[static_cast<size_t>(btCol)];
+							SdvxEditor::EditCommand btCmd{};
+							btCmd.type      = SdvxEditor::CommandType::AddBT;
+							btCmd.lane      = btCol;
+							btCmd.pulse     = placePulse;
+							btCmd.noteAfter = kson::Interval{ 0 };
+							sdvxHistory.execute(btCmd, sdvxChart);
+						}
+						else if (sdvxTool == SdvxTool::FX)
+						{
+							auto& lane = sdvxChart.chart().note.fx[static_cast<size_t>(fxSide)];
+							SdvxEditor::EditCommand fxCmd{};
+							fxCmd.type      = SdvxEditor::CommandType::AddFX;
+							fxCmd.lane      = fxSide;
+							fxCmd.pulse     = placePulse;
+							fxCmd.noteAfter = kson::Interval{ 0 };
+							sdvxHistory.execute(fxCmd, sdvxChart);
+						}
+						else if (sdvxTool == SdvxTool::LaserL || sdvxTool == SdvxTool::LaserR)
+						{
+							const int laserLane = (sdvxTool == SdvxTool::LaserL) ? 0 : 1;
+							const float normX = std::clamp(relX / hwSize.x, 0.0f, 1.0f);
+							auto& laneMap = sdvxChart.chart().note.laser[static_cast<size_t>(laserLane)];
+
+							const kson::Pulse searchTol = kson::kResolution;
+							bool addedToExisting = false;
+
+							for (auto& [sectionPulse, section] : laneMap)
+							{
+								if (std::abs(static_cast<long long>(sectionPulse - placePulse)) < searchTol)
+								{
+									// Save before state, modify, record command
+									SdvxEditor::EditCommand cmd{};
+									cmd.type        = SdvxEditor::CommandType::ModifyLaser;
+									cmd.lane        = laserLane;
+									cmd.pulse       = sectionPulse;
+									cmd.laserBefore = std::make_shared<kson::LaserSection>(section);
+
+									const kson::RelPulse relP = placePulse - sectionPulse;
+									section.v.insert_or_assign(relP,
+										kson::GraphPoint{ kson::GraphValue{ normX, normX } });
+
+									cmd.laserAfter = std::make_shared<kson::LaserSection>(section);
+									sdvxHistory.execute(cmd, sdvxChart);
+									addedToExisting = true;
+									break;
+								}
+							}
+
+							if (!addedToExisting)
+							{
+								kson::LaserSection newSection{};
+								newSection.v.emplace(kson::RelPulse{ 0 },
+									kson::GraphPoint{ kson::GraphValue{ normX, normX } });
+
+								SdvxEditor::EditCommand cmd{};
+								cmd.type       = SdvxEditor::CommandType::AddLaser;
+								cmd.lane       = laserLane;
+								cmd.pulse      = placePulse;
+								cmd.laserAfter = std::make_shared<kson::LaserSection>(newSection);
+								sdvxHistory.execute(cmd, sdvxChart);
+							}
+						}
+					}
+
+					// ---- Extend hold while dragging ----
+					if (sdvxDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+					{
+						const kson::Pulse dragEnd   = placePulse;
+						const kson::Pulse dragStart = sdvxDragStartPulse;
+
+						if (dragEnd > dragStart)
+						{
+							const kson::RelPulse length = dragEnd - dragStart;
+
+							if (sdvxTool == SdvxTool::BT)
+							{
+								auto& lane = sdvxChart.chart().note.bt[static_cast<size_t>(sdvxDragLane)];
+								auto it = lane.find(dragStart);
+								if (it != lane.end())
+									it->second.length = length;
+							}
+							else if (sdvxTool == SdvxTool::FX)
+							{
+								auto& lane = sdvxChart.chart().note.fx[static_cast<size_t>(sdvxDragLane)];
+								auto it = lane.find(dragStart);
+								if (it != lane.end())
+									it->second.length = length;
+							}
+						}
+					}
+
+					// ---- Delete on right-click ----
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+					{
+						const kson::Pulse tol = snap * 2;
+
+						auto eraseNear = [&](auto& laneMap) {
+							for (auto it = laneMap.begin(); it != laneMap.end(); ++it)
+							{
+								const long long diff = static_cast<long long>(it->first)
+													- static_cast<long long>(placePulse);
+								if (std::abs(diff) < static_cast<long long>(tol))
+								{
+									laneMap.erase(it);
+									return;
+								}
+							}
+						};
+
+						if (sdvxTool == SdvxTool::BT)
+							eraseNear(sdvxChart.chart().note.bt[static_cast<size_t>(btCol)]);
+						else if (sdvxTool == SdvxTool::FX)
+							eraseNear(sdvxChart.chart().note.fx[static_cast<size_t>(fxSide)]);
+						else if (sdvxTool == SdvxTool::LaserL)
+							eraseNear(sdvxChart.chart().note.laser[0]);
+						else if (sdvxTool == SdvxTool::LaserR)
+							eraseNear(sdvxChart.chart().note.laser[1]);
+					}
 				}
 			}
 
-			// Reserve a fixed area for the highway so it stays usable.
-			const float highwayHeight = std::max(200.0f, ImGui::GetContentRegionAvail().y);
-			ImGui::BeginChild("##sdvx_highway", ImVec2(0, highwayHeight), true,
-			                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-			trackRenderer.render(sdvxChart);
+			// Stop drag when mouse released
+			if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+				sdvxDragging = false;
+
 			ImGui::EndChild();
+			if (ImGui::CollapsingHeader("Chart Properties"))
+				SdvxEditor::drawMetaPanel(sdvxChart);
 		}
 		ImGui::End();
 
